@@ -50,7 +50,7 @@ static void read_mac(const char *ifname, n2n_mac_t mac_addr) {
     } else
         memcpy(mac_addr, &ifr.ifr_ifru.ifru_hwaddr.sa_data, sizeof(n2n_mac_t));
 
-    traceEvent(TRACE_NORMAL, "Interface %s has MAC %s",
+    traceEvent(TRACE_DEBUG, "Interface %s has MAC %s",
                ifname,
                macaddr_str(mac_addr_buf, mac_addr));
     close(_sock);

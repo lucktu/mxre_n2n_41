@@ -178,7 +178,7 @@ TWOFISH *TwoFishInit(const uint8_t *userkey, uint64_t keysize)
           TwoFish_srand=false;
           /* REVISIT: BbMaj7 : Should choose something with less predictability
            * particularly for embedded targets with no real-time clock. */
-          srand((unsigned int)time(NULL)); 
+          srand((unsigned int)time(NULL));
       }
   }
   return tfdata;					/* return the data pointer */
@@ -245,12 +245,12 @@ uint64_t _TwoFish_CryptRaw(uint8_t *in,uint8_t *out,uint64_t len,bool decrypt,TW
  */
 
 uint64_t TwoFishEncryptRaw(uint8_t *in,
-			    uint8_t *out,
-			    uint64_t len,
-			    TWOFISH *tfdata)
-{	_TwoFish_ResetCBC(tfdata);							/* reset CBC flag. */
-  tfdata->output=out;							/* output straight into output buffer. */
-  return _TwoFish_CryptRaw(in,out,len,false,tfdata);	/* and go for it. */
+                            uint8_t *out,
+                            uint64_t len,
+                            TWOFISH *tfdata)
+{   _TwoFish_ResetCBC(tfdata);  /* reset CBC flag. */
+    tfdata->output=out;         /* output straight into output buffer. */
+    return _TwoFish_CryptRaw(in,out,len,false,tfdata);
 }
 
 /*	TwoFish Raw Decryption
@@ -975,7 +975,7 @@ uint32_t _TwoFish_Fe32(uint32_t *lsBox,uint32_t x,uint32_t R)
 
 #define TEST_DATA_SIZE 327
 
-int main(int argc, char* argv[]) 
+int main(int argc, char* argv[])
 {
     int i;
     int n;

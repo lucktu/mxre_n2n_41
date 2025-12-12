@@ -129,7 +129,7 @@ static ssize_t transop_encode_twofish( n2n_trans_op_t * arg,
             memcpy( assembly + TRANSOP_TF_NONCE_SIZE, inbuf, in_len );
 
             /* Encrypt the assembly contents and write the ciphertext after the SA. */
-            len = TwoFishEncryptRaw( assembly, /* source */
+            len = (ssize_t)TwoFishEncryptRaw(assembly, /* source */
                                      outbuf + TRANSOP_TF_VER_SIZE + TRANSOP_TF_SA_SIZE,
                                      in_len + TRANSOP_TF_NONCE_SIZE, /* enc size */
                                      sa->enc_tf);
@@ -224,7 +224,7 @@ static ssize_t transop_decode_twofish( n2n_trans_op_t * arg,
 
                 traceEvent( TRACE_DEBUG, "decode_twofish %lu with SA %lu.", in_len, sa_rx, sa->sa_id );
 
-                len = TwoFishDecryptRaw( (void *)(inbuf + TRANSOP_TF_VER_SIZE + TRANSOP_TF_SA_SIZE),
+                len = (ssize_t)TwoFishDecryptRaw((void *)(inbuf + TRANSOP_TF_VER_SIZE + TRANSOP_TF_SA_SIZE),
                                          assembly, /* destination */
                                          (in_len - (TRANSOP_TF_VER_SIZE + TRANSOP_TF_SA_SIZE)),
                                          sa->dec_tf);

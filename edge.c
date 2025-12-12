@@ -56,8 +56,8 @@ char const* gcrypt_version;
 #define REGISTER_SUPER_INTERVAL_DFL     60 /* sec */
 #endif /* #if defined(DEBUG) */
 
-#define REGISTER_SUPER_INTERVAL_MIN     20   /* sec */
-#define REGISTER_SUPER_INTERVAL_MAX     3600 /* sec */
+#define REGISTER_SUPER_INTERVAL_MIN     30   /* sec */
+#define REGISTER_SUPER_INTERVAL_MAX     120  /* sec */
 
 #define IFACE_UPDATE_INTERVAL           (30) /* sec. How long it usually takes to get an IP lease. */
 #define TRANSOP_TICK_INTERVAL           (10) /* sec */
@@ -385,7 +385,7 @@ static int edge_init(n2n_edge_t * eee)
     eee->known_peers    = NULL;
     eee->pending_peers  = NULL;
     eee->last_register_req = 0;
-    eee->register_lifetime = REGISTER_SUPER_INTERVAL_DFL;
+    eee->register_lifetime = 120;
     eee->last_p2p = 0;
     eee->last_sup = 0;
     eee->sup_attempts = N2N_EDGE_SUP_ATTEMPTS;
@@ -480,6 +480,15 @@ static int n2n_tick_transop( n2n_edge_t * eee, time_t now )
 {
     n2n_tostat_t tst;
     size_t trop = eee->tx_transop_idx;
+
+    if (eee->tx_transop_idx == N2N_TRANSOP_SPECK_IDX) {
+        tst = (eee->transop[N2N_TRANSOP_SPECK_IDX].tick)( &(eee->transop[N2N_TRANSOP_SPECK_IDX]), now );
+        if ( tst.can_tx ) {
+            trop = N2N_TRANSOP_SPECK_IDX;
+        }
+        eee->tx_transop_idx = trop;
+        return 0;
+    }
 
     /* Tests are done in order that most preferred transform is last and causes
      * tx_transop_idx to be left at most preferred valid transform. */
@@ -1179,6 +1188,18 @@ static void send_grat_arps(n2n_edge_t * eee,) {
  */
 static void update_supernode_reg( n2n_edge_t * eee, time_t nowTime )
 {
+    if ( nowTime > (time_t) (eee->last_register_req + 30) )
+    {
+        traceEvent( TRACE_DEBUG, "Registering with supernode (30s interval)" );
+
+        eee->sn_wait = 0;
+        eee->sup_attempts = N2N_EDGE_SUP_ATTEMPTS;
+        send_register_super( eee, &(eee->supernode) );
+        eee->sn_wait = 1;
+        eee->last_register_req = nowTime;
+        return;
+    }
+
     if ( eee->sn_wait && ( nowTime > (time_t) (eee->last_register_req + (eee->register_lifetime/10) ) ) )
     {
         /* fall through */
@@ -1326,9 +1347,12 @@ static int send_PACKET( n2n_edge_t * eee,
  */
 static size_t edge_choose_tx_transop( const n2n_edge_t * eee )
 {
-    if ( eee->null_transop)
-    {
+    if ( eee->null_transop) {
         return N2N_TRANSOP_NULL_IDX;
+    }
+
+    if (eee->tx_transop_idx == N2N_TRANSOP_SPECK_IDX) {
+        return N2N_TRANSOP_SPECK_IDX;
     }
 
     return eee->tx_transop_idx;
@@ -1957,7 +1981,7 @@ static void readFromIPSocket( n2n_edge_t * eee )
                 }
 
 								if (first_super_ack_shown == 0) {
-										traceEvent(TRACE_NORMAL, "Rx REGISTER_SUPER_ACK myMAC=%s [%s] (external %s). Attempts %u",
+										traceEvent(TRACE_DEBUG, "Rx REGISTER_SUPER_ACK myMAC=%s [%s] (external %s). Attempts %u",
 															 macaddr_str( mac_buf1, ra.edgeMac ),
 															 sock_to_cstr( sockbuf1, &sender ),
 															 sock_to_cstr( sockbuf2, orig_sender ),
@@ -1975,7 +1999,7 @@ static void readFromIPSocket( n2n_edge_t * eee )
                 {
                     if ( ra.num_sn > 0 )
                     {
-                        traceEvent(TRACE_NORMAL, "Rx REGISTER_SUPER_ACK backup supernode at %s",
+                        traceEvent(TRACE_DEBUG, "Rx REGISTER_SUPER_ACK backup supernode at %s",
                                    sock_to_cstr(sockbuf1, &(ra.sn_bak) ) );
                     }
 
