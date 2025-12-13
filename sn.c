@@ -708,10 +708,23 @@ static int process_udp( n2n_sn_t * sss,
 /** Help message to print if the command line arguments are not valid. */
 static void help(int argc, char * const argv[])
 {
-    fprintf( stderr, "%s usage\n", argv[0] );
+    print_n2n_version();
+
+    printf("supernode "
+        "-l <lport> "
+        "[-4 -6] "
+#ifndef _WIN32
+        "[-t <port>] "
+#endif
+#if defined(N2N_HAVE_DAEMON)
+        "[-f] "
+#endif
+        "[-v] "
+        "[-h]\n\n");
+
     fprintf( stderr, "-l <lport>\tSet UDP main listen port to <lport>\n" );
-    fprintf( stderr, "-4        \tUse IPv4 network (default)\n" );
-    fprintf( stderr, "-6        \tUse IPv6 network\n" );
+    fprintf( stderr, "-6        \tUse IPv6 network (default is IPv4)\n" );
+    fprintf( stderr, "-4 -6     \tUse both IPv4 and IPv6 (dual-stack mode)\n" );
 #ifndef _WIN32
     fprintf( stderr, "-t <port>\tSet management UDP port to <port> (default = 5645)\n" );
 #endif
@@ -740,6 +753,8 @@ static const struct option long_options[] = {
 /** Main program entry point from kernel. */
 int main( int argc, char * const argv[] )
 {
+    int lport_specified = 0;
+
     n2n_sn_t sss;
     bool ipv4 = false, ipv6 = false;
 
@@ -774,6 +789,7 @@ int main( int argc, char * const argv[] )
             {
             case 'l': /* local-port */
                 sss.lport = atoi(optarg);
+																lport_specified = 1;
                 break;
             case 't':
 #ifndef _WIN32
@@ -806,6 +822,12 @@ int main( int argc, char * const argv[] )
 
     /* enable ipv4 if there was no parameter provided */
     ipv4 = ipv4 || !ipv6;
+
+    if (!lport_specified) {
+        traceEvent(TRACE_ERROR, "Error: Listen port is required (-l <port>)");
+        help(argc, argv);
+        exit(1);
+    }
 
 #if defined(N2N_HAVE_DAEMON)
     if (sss.daemon)

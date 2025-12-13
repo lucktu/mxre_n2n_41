@@ -1,3 +1,39 @@
-const char * n2n_sw_version   = N2N_VERSION;
-const char * n2n_sw_osName    = N2N_OSNAME;
-const char * n2n_sw_buildDate = __DATE__ " " __TIME__;
+#include "n2n.h"
+#if USE_OPENSSL
+#include <openssl/crypto.h>
+#endif
+
+char * n2n_sw_version   = N2N_VERSION;
+char * n2n_sw_osName    = N2N_OSNAME;
+char * n2n_sw_buildDate = __DATE__ " " __TIME__;
+
+void print_n2n_version() {
+    printf("Welcome to n2n v.%s for %s\n"
+           "Built on %s\n",
+           n2n_sw_version, n2n_sw_osName, n2n_sw_buildDate);
+#ifdef N2N_HAVE_AES
+#if USE_MBEDTLS
+        char mbed_version[10];
+        mbedtls_version_get_string(mbed_version);
+#endif
+    printf("With AES provided by "
+#if USE_OPENSSL
+           "%s\n", OpenSSL_version(0)
+#elif USE_NETTLE
+           "nettle %d.%d\n", nettle_version_major(), nettle_version_minor()
+#elif USE_MBEDTLS
+           "mbed TLS %s\n", mbed_version
+#elif USE_GCRYPT
+           "libgcrypt %s\n", gcrypt_version
+#elif USE_ELL
+           "Embeded Linux Library\n"
+#elif USE_BCRYPT
+           "Cryptography API: Next Generation (bcrypt.dll)\n"
+#else
+#error "Unknown Crypto Library"
+#endif
+    );
+#endif // N2N_HAVE_AES
+    printf("Copyright 2007-16 - http://www.ntop.org\n"
+           "Copyright 2017-20 - https://github.com/mxre/n2n\n\n");
+}

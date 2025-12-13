@@ -624,48 +624,18 @@ static void readFromIPSocket( n2n_edge_t * eee );
 
 static void readFromMgmtSocket( n2n_edge_t * eee, int * keep_running );
 
-
-void print_n2n_version() {
-    printf("Welcome to n2n v.%s for %s\n"
-           "Built on %s\n",
-           n2n_sw_version, n2n_sw_osName, n2n_sw_buildDate);
-#ifdef N2N_HAVE_AES
-#if USE_MBEDTLS
-        char mbed_version[10];
-        mbedtls_version_get_string(mbed_version);
-#endif
-    printf("With AES provided by "
-#if USE_OPENSSL
-           "%s\n", OpenSSL_version(0)
-#elif USE_NETTLE
-           "nettle %d.%d\n", nettle_version_major(), nettle_version_minor()
-#elif USE_MBEDTLS
-           "mbed TLS %s\n", mbed_version
-#elif USE_GCRYPT
-           "libgcrypt %s\n", gcrypt_version
-#elif USE_ELL
-           "Embeded Linux Library\n"
-#elif USE_BCRYPT
-           "Cryptography API: Next Generation (bcrypt.dll)\n"
-#else
-#error "Unknown Crypto Library"
-#endif
-    );
-#endif // N2N_HAVE_AES
-    printf("Copyright 2007-09 - http://www.ntop.org\n"
-           "Copyright 2018-25 - https://github.org/mxre/n2n\n\n");
-}
-
 static void help() {
     print_n2n_version();
 
+    printf("edge [config_file] <options>\n");
+    printf("or:\n");
     printf("edge "
 #if N2N_CAN_NAME_IFACE && !defined(_WIN32)
         "-d <tun device> "
 #elif N2N_CAN_NAME_IFACE && defined(_WIN32)
         "[-d <tun device>] "
 #endif /* #if N2N_CAN_NAME_IFACE */
-        "-a [static:|dhcp:]<tun IP address>/<prefixlen> "
+        "-a [static:|dhcp:] <tun IP address>/<prefixlen> "
         "-c <community> "
         "-B <encryption mode> "
         "[-k <encrypt key> | -K <key file>] "
@@ -674,20 +644,21 @@ static void help() {
 #endif /* #ifdef N2N_HAVE_SETUID */
 
 #if defined(N2N_HAVE_DAEMON)
-        "[-f]"
+	        "\n"
+        "[-f] "
 #endif /* #if defined(N2N_HAVE_DAEMON) */
 #ifndef _WIN32
-        "[-m <MAC address>]"
+        "[-m <MAC address>] "
 #endif
-        "\n"
         "-l <supernode host:port> "
-        "[-4|-6]"
+        "[-4|-6] "
         "[-p <local port>] "
 #ifndef _WIN32
         "[-M <mtu>] "
 #endif
         "[-r|-R <route>] [-E] [-v] [-t <mgmt port>] [-h]\n\n");
 #ifdef N2N_CAN_NAME_IFACE
+
     printf("-d <tun device>          | tun device name\n");
 #endif
     printf("-a <mode:IPv4/prefixlen> | Set interface IPv4 address. For DHCP use '-r -a dhcp:0.0.0.0/0'\n");
@@ -706,7 +677,7 @@ static void help() {
     printf("-k <encrypt key>         | Encryption key (ASCII, max 32) - also N2N_KEY=<encrypt key>. Not with -K.\n");
     printf("-K <key file>            | Specify a key schedule file to load. Not with -k.\n");
     printf("-l <supernode host:port> | Supernode IP:port\n");
-    printf("[-4|-6]                  | Resolve supernode DNS name as IPv4 or IPv6 (default is unspecified)\n");
+    printf("-4|-6                    | Resolve supernode DNS name as IPv4 or IPv6 (default: auto)\n");
     printf("-p <local port>          | Fixed local UDP port.\n");
 #ifndef _WIN32
     printf("-u <UID>                 | User ID (numeric) to use when privileges are dropped.\n");
@@ -2501,36 +2472,44 @@ int main(int argc, char* argv[])
     memset(&(eee.supernode), 0, sizeof(eee.supernode));
     eee.supernode.family = AF_INET;
 
-    /* rebuilding argv has a serious bug, it does not recognize arguments with spaces,
-     * therefore elimination use of key files in paths with spaces in them.
-     * Also on Windows, when specifing adapters with -d, the can were not allowed
-     * to contain spaces. Removing this code fixes all that (albeit removing support for
-     * the undocumented @config file feature. */
-#if 0
-    for(i=1;i<argc;++i) {
-        if(argv[i][0] == '@') {
-            if (readConfFile(&argv[i][1], linebuffer)<0) exit(1); /* <<<<----- check */
-        } else if ((strlen(linebuffer)+strlen(argv[i])+2) < MAX_CMDLINE_BUFFER_LENGTH) {
-            strcat(linebuffer, " ");
-            strcat(linebuffer, argv[i]);
-        } else {
-            traceEvent( TRACE_ERROR, "too many argument");
-            exit(1);
-        }
+/* Check if first argument is a config file (not starting with '-') */
+if (argc > 1 && argv[1][0] != '-' && access(argv[1], R_OK) == 0) {
+    char linebuffer[MAX_CMDLINE_BUFFER_LENGTH] = {0};
+    if (readConfFile(argv[1], linebuffer) < 0) {
+        traceEvent(TRACE_ERROR, "Failed to read config file: %s", argv[1]);
+        exit(1);
     }
-    /*  strip trailing spaces */
-    while(strlen(linebuffer) && linebuffer[strlen(linebuffer)-1]==' ')
-        linebuffer[strlen(linebuffer)-1]= '\0';
 
-    /* build the new argv from the linebuffer */
-    effectiveargv = buildargv(&effectiveargc, linebuffer);
+    /* Build new argv from config file and remaining arguments */
+    char **config_argv;
+    int config_argc;
 
-    if (linebuffer) {
-        free(linebuffer);
-        linebuffer = NULL;
+    /* Parse config file into argv */
+    config_argv = buildargv(&config_argc, linebuffer);
+    if (!config_argv) {
+        traceEvent(TRACE_ERROR, "Failed to parse config file");
+        exit(1);
     }
-    /* {int k;for(k=0;k<effectiveargc;++k)  printf("%s\n",effectiveargv[k]);} */
-#endif
+
+    /* Create new argv array with program name and remaining args */
+    char **new_argv = malloc((config_argc + argc - 1) * sizeof(char*));
+    new_argv[0] = argv[0];
+
+    /* Copy config file arguments */
+    for (int i = 0; i < config_argc; i++) {
+        new_argv[i + 1] = config_argv[i];
+    }
+
+    /* Copy remaining command line arguments */
+    for (int i = 2; i < argc; i++) {
+        new_argv[config_argc + i - 1] = argv[i];
+    }
+
+    /* Update argc and argv for getopt_long */
+    argc = config_argc + argc - 1;
+    argv = new_argv;
+    optind = 1; /* Reset getopt */
+}
 
     optarg = NULL;
     while((opt = getopt_long(argc,
@@ -2734,6 +2713,18 @@ int main(int argc, char* argv[])
 
     srand((unsigned int) time(NULL));
 
+    if(!(
+#if N2N_CAN_NAME_IFACE && !defined(_WIN32)
+        /* windows can use a default */
+        (tuntap_dev_name[0] != 0) &&
+#endif
+        (eee.community_name[0] != 0) &&
+        (ip_addr[0] != 0)
+    ) ) {
+        help();
+        exit(1);
+    }
+
 #ifdef N2N_HAVE_DAEMON
     if ( eee.daemon )
     {
@@ -2786,18 +2777,6 @@ int main(int argc, char* argv[])
 #else
         sleep(5);
 #endif
-    }
-
-    if(!(
-#if N2N_CAN_NAME_IFACE && !defined(_WIN32)
-        /* windows can use a default */
-        (tuntap_dev_name[0] != 0) &&
-#endif
-        (eee.community_name[0] != 0) &&
-        (ip_addr[0] != 0)
-    ) ) {
-        help();
-        exit(1);
     }
 
     if ( (NULL == encrypt_key ) && ( 0 == strlen(eee.keyschedule)) ) {
