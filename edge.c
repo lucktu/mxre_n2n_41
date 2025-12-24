@@ -635,7 +635,7 @@ static void help() {
 
     printf("Usage: edge [config_file] <options>\n");
     printf("or: edge -d <tun device> -a <tun IP address> -c <community> -k <encrypt key> -l <supernode host:port>\n");
-    printf("or: edge -c <community> (default: -d n2nx -a 10.64.0.x -k disable -l ouno.eu.org:10084, unsafe, not recommended)\n");
+    printf("or: edge -c <community> (default: -d n2nx -a 10.64.0.x -l ouno.eu.org:10084; no password, not secure, not recommended)\n");
     printf("\n");
 
 #if N2N_CAN_NAME_IFACE && !defined(_WIN32)
@@ -3117,7 +3117,7 @@ static int run_loop(n2n_edge_t * eee )
     size_t numPurged;
     time_t lastIfaceCheck=0;
     time_t lastTransop=0;
-
+    int   retval = 0;
 
 #ifdef _WIN32
     startTunReadThread(eee);
@@ -3163,6 +3163,10 @@ static int run_loop(n2n_edge_t * eee )
             }
 #endif
             traceEvent(TRACE_ERROR, "select() failed: %s", strerror(errno));
+            if (errno == EBADF || errno == ENOMEM) {
+                retval = -1;
+                goto cleanup;
+            }
             continue;
         }
 
@@ -3170,14 +3174,12 @@ static int run_loop(n2n_edge_t * eee )
         if ( ( nowTime - lastTransop ) > TRANSOP_TICK_INTERVAL )
         {
             lastTransop = nowTime;
-
             n2n_tick_transop( eee, nowTime );
         }
 
         if(rc > 0)
         {
             /* Any or all of the FDs could have input; check them all. */
-
             if(FD_ISSET(eee->udp_sock, &socket_mask))
             {
                 /* Read a cooked socket from the internet socket. Writes on the TAP
@@ -3223,14 +3225,17 @@ static int run_loop(n2n_edge_t * eee )
 
     } /* while */
 
+cleanup:
     send_deregister( eee, &(eee->supernode));
 
-    closesocket(eee->udp_sock);
+    if (eee->udp_sock != -1) {
+        closesocket(eee->udp_sock);
+        eee->udp_sock = -1;
+    }
+
     tuntap_close(&(eee->device));
 
     edge_deinit( eee );
 
-    return(0);
+    return retval;
 }
-
-
